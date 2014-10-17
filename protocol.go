@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 )
 
 const (
@@ -50,6 +51,7 @@ func createClientProtocol(queueSize int) *ClientProtocol {
 
 func (p *ClientProtocol) process(data []byte) error {
 	total := len(data)
+	fmt.Println(total)
 	i := 0
 	//TODO
 	for i < total {
@@ -77,12 +79,27 @@ func (p *ClientProtocol) process(data []byte) error {
 			fallthrough
 		case STATE_ERROR:
 			//TODO
-			d, _ := bytes.NewBuffer(data[i:]).ReadBytes('\n')
+			fmt.Println("enter")
+			d, e := bytes.NewBuffer(data[i:]).ReadBytes('\n')
 			i = i + len(d)
-			b := make([]byte, len(d)-2)
-			copy(b, d[:len(d)-2])
-			p.tmp_Received.data = b
-			p.state = STATE_DONE
+			switch p.substate {
+			case SUBSTATE_CONTINUE:
+				p.tmp_Received.data = append(p.tmp_Received.data, d[:len(d)]...)
+				if e == io.EOF {
+					p.substate = SUBSTATE_CONTINUE
+					continue
+				}
+				p.state = STATE_DONE
+			case SUBSTATE_START:
+				b := make([]byte, len(d))
+				copy(b, d[:len(d)])
+				p.tmp_Received.data = b
+				if e == io.EOF {
+					p.substate = SUBSTATE_CONTINUE
+					continue
+				}
+				p.state = STATE_DONE
+			}
 		case STATE_DONE:
 			r := <-p.queue
 			switch p.tmp_Received.t {
